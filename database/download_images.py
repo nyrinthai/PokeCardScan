@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 import argparse
+import hashlib
 import sqlite3
 from pathlib import Path
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 
-def image_path(directory, image_id, image_url):
+def image_path(directory, product_id, image_url):
     suffix = Path(urlsplit(image_url).path).suffix.lower()
     if suffix not in {".jpg", ".jpeg", ".png", ".webp"}:
         suffix = ".img"
-    return directory / f"{image_id}{suffix}"
+    url_hash = hashlib.sha256(image_url.encode()).hexdigest()[:8]
+    return directory / f"{product_id}_{url_hash}{suffix}"
 
 
 def main():
@@ -23,7 +25,7 @@ def main():
 
     with sqlite3.connect(args.database) as connection:
         rows = connection.execute(
-            """SELECT image_id, image_url
+            """SELECT image_id, product_id, image_url
                FROM card_images
                JOIN cards USING (product_id)
                WHERE set_id = ?
@@ -36,8 +38,8 @@ def main():
     args.directory.mkdir(parents=True, exist_ok=True)
     downloaded = skipped = missing = 0
     # sequential downloads; add a small thread pool if full-catalog sync is too slow.
-    for image_id, image_url in rows:
-        destination = image_path(args.directory, image_id, image_url)
+    for image_id, product_id, image_url in rows:
+        destination = image_path(args.directory, product_id, image_url)
         if destination.is_file() and destination.stat().st_size > 0:
             skipped += 1
             continue

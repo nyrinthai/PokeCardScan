@@ -20,7 +20,7 @@ def main():
     with sqlite3.connect(args.database) as connection:
         connection.execute("PRAGMA foreign_keys = ON")
         images = connection.execute(
-            """SELECT image_id, image_url
+            """SELECT image_id, product_id, image_url
                FROM card_images
                JOIN cards USING (product_id)
                WHERE set_id = ?
@@ -32,8 +32,8 @@ def main():
 
         if not args.verify_only:
             with connection:
-                for image_id, image_url in images:
-                    path = image_path(args.directory, image_id, image_url)
+                for image_id, product_id, image_url in images:
+                    path = image_path(args.directory, product_id, image_url)
                     if not path.is_file() or path.stat().st_size == 0:
                         raise FileNotFoundError(f"missing image {path}")
                     with Image.open(path) as image:
