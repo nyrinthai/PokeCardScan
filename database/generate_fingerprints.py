@@ -37,9 +37,9 @@ def main():
                     if not path.is_file() or path.stat().st_size == 0:
                         raise FileNotFoundError(f"missing image {path}")
                     with Image.open(path) as image:
-                        fingerprint = bytes.fromhex(str(imagehash.phash(image)))
-                    if len(fingerprint) != 8:
-                        raise ValueError(f"pHash for image {image_id} is not 64 bits")
+                        fingerprint = bytes.fromhex(str(imagehash.phash(image, hash_size=16)))
+                    if len(fingerprint) != 32:
+                        raise ValueError(f"pHash for image {image_id} is not 256 bits")
                     connection.execute(
                         """INSERT INTO fingerprints (image_id, algorithm, region, fingerprint_blob)
                            VALUES (?, 'phash', 'full', ?)
@@ -54,12 +54,12 @@ def main():
                JOIN card_images USING (image_id)
                JOIN cards USING (product_id)
                WHERE set_id = ? AND algorithm = 'phash' AND region = 'full'
-                   AND length(fingerprint_blob) = 8""",
+                   AND length(fingerprint_blob) = 32""",
             (args.set_id,),
         ).fetchone()[0]
     if valid != len(images):
         raise SystemExit(f"Verification failed: {valid} valid fingerprints for {len(images)} images")
-    print(f"Verified {valid} full-card 64-bit pHashes for set {args.set_id}")
+    print(f"Verified {valid} full-card 256-bit pHashes for set {args.set_id}")
 
 
 if __name__ == "__main__":
