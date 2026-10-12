@@ -6,17 +6,10 @@ import imagehash
 from PIL import Image
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Generate a pHash for a cropped card photo")
-    parser.add_argument("--database", type=Path, default=Path("catalog.sqlite3"))
-    parser.add_argument("image", type=Path)
-    args = parser.parse_args()
+def match_card(image, database):
+    query_hash = imagehash.phash(image, hash_size=16)
 
-    with Image.open(args.image) as image:
-        query_hash = imagehash.phash(image, hash_size=16)
-    print(query_hash)
-    
-    with sqlite3.connect(args.database) as connection:
+    with sqlite3.connect(database) as connection:
         references = connection.execute(
             """SELECT product_id, name, collector_number, fingerprint_blob
             FROM fingerprints
@@ -25,20 +18,38 @@ def main():
             WHERE algorithm = 'phash' AND region = 'full'"""
         ).fetchall()
 
-    print(f"Loaded {len(references)} reference fingerprints")
-    
+    if not references:
+        raise ValueError("No reference fingerprints found")
+
     matches = []
     
     for product_id, name, collector_number, fingerprint_blob in references:
+        if len(fingerprint_blob) != 32:
+            raise ValueError(
+                f"Expected a 256-bit fingerprint for product {product_id}; "
+                "regenerate reference fingerprints"
+            )
         reference_hash = imagehash.hex_to_hash(fingerprint_blob.hex())
         distance = query_hash - reference_hash
         matches.append((distance, product_id, name, collector_number))
 
     matches.sort()
-    
+    return matches
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Match a cropped card photo")
+    parser.add_argument("--database", type=Path, default=Path("catalog.sqlite3"))
+    parser.add_argument("image", type=Path)
+    args = parser.parse_args()
+
+    with Image.open(args.image) as image:
+        matches = match_card(image, args.database)
+
     for rank, match in enumerate(matches[:5], start=1):
         distance, product_id, name, collector_number = match
         print(rank, name, collector_number, product_id, distance)
-    
+
+
 if __name__ == "__main__":
     main()
