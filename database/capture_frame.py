@@ -6,6 +6,8 @@ import numpy as np
 from PIL import Image
 
 from match_card import match_card
+from card_geometry import rectify_card
+from ultralytics import YOLO
 
 def collect_corner(event, x, y, flags, points):
     if event == cv2.EVENT_LBUTTONDOWN and len(points) < 4:
@@ -16,6 +18,7 @@ def main():
     parser = argparse.ArgumentParser(description="Capture one webcam frame")
     parser.add_argument("--camera", type=int, default=0)
     parser.add_argument("--database", type=Path, default=Path("catalog.sqlite3"))
+    parser.add_argument("--weights", type=Path, default=Path("models/card_pose_yolov8n.pt"))
     parser.add_argument(
         "output",
         type=Path,
@@ -23,6 +26,12 @@ def main():
         default=Path("webcam_frame.jpg"),
     )
     args = parser.parse_args()
+
+    if not args.weights.is_file():
+        parser.error(f"Missing model weights: {args.weights}")
+    if not args.database.is_file():
+        parser.error(f"Missing database: {args.database}")
+    model = YOLO(str(args.weights))
 
     camera = cv2.VideoCapture(args.camera)
     try:
@@ -42,14 +51,33 @@ def main():
             if key == ord(" "):
                 break
         
+        original_path = args.output.with_name(f"{args.output.stem}_original.png")
+        if not cv2.imwrite(str(original_path), frame):
+            raise SystemExit(f"Could not save {original_path}")
+        print(f"Saved original frame to {original_path}")
+
         window = "Corners: TL, TR, BR, BL - Enter: confirm, R: reset, Esc: cancel"
         points = []
+        result = model.predict(frame, imgsz=480, conf=0.25, device="cpu", verbose=False)[0]
+        if result.keypoints is not None:
+            for index in result.boxes.conf.argsort(descending=True).tolist():
+                quad = result.keypoints.xy[index].cpu().numpy()
+                try:
+                    rectify_card(frame, quad)
+                except ValueError:
+                    continue
+                points.extend(quad.tolist())
+                print("Automatic corners found. Enter: accept; R: select manually.")
+                break
+        if not points:
+            print("No valid automatic corners. Click TL, TR, BR, BL; Enter: confirm.")
         cv2.namedWindow(window)
         cv2.setMouseCallback(window, collect_corner, points)
 
         while True:
             preview = frame.copy()
             for number, point in enumerate(points, start=1):
+                point = tuple(np.rint(point).astype(int).tolist())
                 cv2.circle(preview, point, 5, (0, 255, 0), -1)
                 cv2.putText(preview, str(number), (point[0] + 8, point[1] + 8),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
@@ -62,24 +90,10 @@ def main():
             if key in (10, 13) and len(points) == 4:
                 break
 
-        source = np.array(points, dtype=np.float32)
-        if not cv2.isContourConvex(source) or cv2.contourArea(source, oriented=True) <= 0:
-            raise SystemExit("Select four distinct corners in order: TL, TR, BR, BL")
-
-        top_left, top_right, bottom_right, bottom_left = source
-        width = round(max(np.linalg.norm(top_right - top_left),
-                          np.linalg.norm(bottom_right - bottom_left)))
-        height = round(max(np.linalg.norm(bottom_left - top_left),
-                           np.linalg.norm(bottom_right - top_right)))
-        if width < 2 or height < 2:
-            raise SystemExit("Selected card is too small")
-
-        destination = np.array([
-            (0, 0), (width - 1, 0),
-            (width - 1, height - 1), (0, height - 1),
-        ], dtype=np.float32)
-        transform = cv2.getPerspectiveTransform(source, destination)
-        frame = cv2.warpPerspective(frame, transform, (width, height))
+        try:
+            frame = rectify_card(frame, points)
+        except ValueError as error:
+            raise SystemExit(str(error)) from error
 
         if not cv2.imwrite(str(args.output), frame):
             raise SystemExit(f"Could not save {args.output}")
