@@ -23,6 +23,8 @@ def main():
     model = YOLO(str(args.weights))
     camera = cv2.VideoCapture(args.camera)
     window = "PokeCardScan - Q: quit"
+    previous_product = None
+    agreement = 0
     try:
         if not camera.isOpened():
             raise SystemExit(f"Could not open camera {args.camera}")
@@ -34,6 +36,7 @@ def main():
                                    device="cpu", verbose=False)[0]
             preview = frame.copy()
             lines = ["No valid card detected"]
+            current_product = None
             if result.keypoints is not None:
                 for index in result.boxes.conf.argsort(descending=True).tolist():
                     quad = result.keypoints.xy[index].cpu().numpy()
@@ -44,12 +47,19 @@ def main():
                     image = Image.fromarray(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB))
                     matches = match_card(image, args.database)
                     distance, product_id, name, number = matches[0]
+                    current_product = product_id
+                    agreement = min(agreement + 1, 3) if product_id == previous_product else 1
+                    previous_product = product_id
                     gap = str(matches[1][0] - distance) if len(matches) > 1 else "N/A"
-                    lines = [f"Candidate: {name}",
+                    status = "Stable candidate" if agreement == 3 else f"Checking {agreement}/3"
+                    lines = [f"{status}: {name}",
                              f"Product: {product_id} | distance: {distance}/256 | gap: {gap}"]
                     points = np.rint(quad).astype(np.int32)
                     cv2.polylines(preview, [points], True, (0, 255, 0), 2)
                     break
+            if current_product is None:
+                previous_product = None
+                agreement = 0
             for row, text in enumerate(lines):
                 location = (10, 25 + row * 25)
                 cv2.putText(preview, text, location, cv2.FONT_HERSHEY_SIMPLEX,
