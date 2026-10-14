@@ -1,32 +1,23 @@
 # PokeCardScan
 
-A Python command-line toolkit for identifying English Pokémon trading cards from cropped photos or a webcam. It imports card metadata and market prices from TCGTracking into SQLite, downloads reference images, and compares 256-bit perceptual hashes. Webcam tools use a YOLO pose model to locate card corners and correct perspective before matching.
+Identify English Pokémon trading cards from photos or a webcam using a local SQLite catalog, 256-bit perceptual hashes, and YOLO card-corner detection.
 
-## Features and benefits
+## Features
 
-- **Local reference catalog:** Store sets, cards, collector numbers, rarity, image URLs, and market prices by finish. Prices are stored as integer cents.
-- **Repeatable preparation:** Reimport sets, reuse existing image downloads, and regenerate or verify reference fingerprints.
-- **Photo matching:** Print the five closest candidates, including product IDs and hash distances.
-- **Guided webcam capture:** Accept automatic corners or select them manually, save the original frame and corrected card image, then show matches.
-- **Live scanning:** Display a candidate, hash distance, and gap to the next match. Three consecutive agreements mark a candidate as stable.
-- **Detector evaluation:** Generate annotated previews, card crops, rankings, and CPU timing summaries from saved frames.
+- Import card metadata and market prices by finish from TCGTracking.
+- Download reference images and generate or verify fingerprints.
+- Rank the five closest matches for a cropped photo.
+- Capture cards with automatic or manual corner selection and perspective correction.
+- Scan live video with three-frame candidate stabilization.
+- Evaluate saved frames with annotated images, card crops, and timing reports.
 
-Recognition uses the locally prepared catalog; importing and downloading reference data require internet access. Detection and matching run locally on the CPU.
+Detection and matching run locally on the CPU after the catalog is prepared.
 
-## Getting started
+## Setup
 
-### Prerequisites
+Use Python 3.12 (the development environment), `pip`, and internet access for installation and catalog preparation. Webcam tools also require a camera and a desktop display.
 
-- Python 3.12 is available in the development workspace; other Python versions have not been verified.
-- `pip` and a virtual environment.
-- Internet access for dependency installation, catalog imports, and reference downloads.
-- For webcam commands: a working camera, a desktop display for OpenCV windows, and card-corner model weights at `database/models/card_pose_yolov8n.pt`.
-
-The weights are present in this workspace but are **not tracked by Git**. A fresh checkout needs a compatible YOLO pose model that predicts four corners in top-left, top-right, bottom-right, bottom-left order. The evaluator identifies the current model source as `duclvQ/tcg-card-detector`, revision `419633c`, under AGPL-3.0. No model download or training script is included.
-
-### Install dependencies
-
-From the repository root (`PokeCardScan/` inside this workspace), run:
+From the repository root:
 
 ```powershell
 python -m venv .venv
@@ -35,28 +26,15 @@ python -m pip install -r database/requirements.txt
 cd database
 ```
 
-On macOS/Linux, replace the activation command with:
+On macOS/Linux, activate with `source .venv/bin/activate` instead.
 
-```bash
-source .venv/bin/activate
-```
+[requirements.txt](database/requirements.txt) pins ImageHash, Pillow, OpenCV, and Ultralytics. NumPy is supplied through these dependencies; SQLite uses Python's standard library.
 
-The pinned dependencies in [requirements.txt](database/requirements.txt) are:
+**Webcam model:** Place compatible YOLO pose weights at `database/models/card_pose_yolov8n.pt`. They are present locally but untracked, so a fresh checkout needs them separately. The model must predict corners in **top-left → top-right → bottom-right → bottom-left** order. No model download or training script is included.
 
-| Dependency | Version | Purpose |
-| --- | --- | --- |
-| ImageHash | 4.3.2 | Perceptual hash generation and comparison |
-| Pillow | 12.3.0 | Image loading and conversion |
-| opencv-python | 5.0.0 | Camera capture, windows, and perspective correction |
-| ultralytics | 8.4.176 | YOLO card-corner detection |
+### Prepare the catalog
 
-NumPy is also imported directly by the camera and geometry tools and is supplied through the dependency stack. SQLite and HTTP requests use Python's standard library. There is no package installer, web server, or API-key configuration in the project.
-
-### Prepare a reference set
-
-Run all examples below from `database/` with the virtual environment active. Default paths are relative to the current working directory.
-
-Use an English Pokémon set ID from TCGTracking. The local catalog currently contains set `24722` (`ME: 30th Celebration`); substitute your desired set ID in all three commands.
+Run all following commands from `database/`; default paths are relative to that directory. Replace `24722` with your desired TCGTracking English Pokémon set ID. The local catalog uses `24722` (`ME: 30th Celebration`).
 
 ```powershell
 python import_set.py 24722
@@ -64,101 +42,87 @@ python download_images.py 24722
 python generate_fingerprints.py 24722
 ```
 
-The importer creates `catalog.sqlite3` using [schema.sql](database/schema.sql). It imports metadata, image references, and available TCG market prices, excluding code cards. Downloads go into `images/`; hashes are saved in the database. Repeat the sequence to add another set.
-
-Check existing preparation without downloading or generating hashes:
+This creates `catalog.sqlite3`, downloads references to `images/`, and stores fingerprints. Code cards are excluded. Repeat for additional sets, or verify existing data:
 
 ```powershell
 python download_images.py 24722 --verify-only
 python generate_fingerprints.py 24722 --verify-only
 ```
 
-Image verification checks that files exist and are nonempty; fingerprint verification checks database entries and their size. These checks do not establish recognition accuracy.
-
-Reimporting replaces the selected set's stored prices with the new response. Changed image URLs invalidate their old fingerprints, so rerun downloads and fingerprint generation after an import. Back up the catalog first if you need to retain earlier prices.
+Reimporting replaces the set's prices and invalidates fingerprints when image URLs change. Rerun downloads and fingerprint generation afterward; back up the database if you need old prices.
 
 ## Usage
 
-### Match a cropped photo
+### Match a photo
 
 ```powershell
 python match_card.py path/to/cropped_card.jpg
 ```
 
-Use a closely cropped, upright, full-card image. This command does not detect corners or correct perspective. Each output row contains rank, card name, collector number, product ID, and hash distance. Lower distances are closer matches on a 256-bit hash.
+Use an upright, closely cropped full-card image; this command does not correct perspective. Output lists rank, name, collector number, product ID, and hash distance. Lower distances mean closer matches.
 
-### Capture and match a webcam image
+### Capture a card
 
 ```powershell
 python capture_frame.py --camera 0 captured_card.jpg
 ```
 
-1. Position the card in the preview and press **Space** to capture; **Q** quits.
-2. Press **Enter** to accept automatic corners, or **R** to reset and click **top-left → top-right → bottom-right → bottom-left**.
-3. Press **Enter** after four corners are selected. **Esc** or **Q** cancels corner selection.
+Press **Space** to capture, then **Enter** to accept detected corners. For manual selection, press **R**, click **top-left → top-right → bottom-right → bottom-left**, and press **Enter**. **Q** quits; **Esc** cancels corner selection.
 
-The tool saves `captured_card_original.png`, writes the rectified card to `captured_card.jpg`, and prints five candidates. Existing files with these names are overwritten. Perspective correction uses the standard 63:88 card aspect ratio.
+Saves `captured_card_original.png` and the corrected `captured_card.jpg`, then prints five matches.
 
-### Scan continuously
+### Scan live
 
 ```powershell
 python scan_live.py --camera 0
 ```
 
-Press **Q** or **Esc**, or close the preview window, to stop. Change `--camera` if your webcam uses another device index. The scanner processes the highest-confidence detection with valid corners in each frame and displays one candidate at a time.
+Press **Q** or **Esc**, or close the window, to stop. Change `--camera` for another device. The preview shows one candidate, hash distance, and the gap to the next match; three consecutive agreements mark it stable.
 
-**A stable candidate is not a confirmed identification.** Matching ranks every available reference without an acceptance threshold. An unknown card can still receive a candidate, and three repeated matches only indicate consistency. Catalog coverage, glare, orientation, and crop quality affect results. Webcam commands do not display stored prices or maintain a collection inventory.
+**Matches are candidates, not confirmed identifications.** There is no rejection threshold, so unknown cards can receive a match. Catalog coverage, lighting, orientation, and crop quality affect results.
 
 ### Evaluate saved frames
 
-Place original frames named `*_original.png` in `test_images/`, then run:
+Place `*_original.png` frames in `test_images/`:
 
 ```powershell
 python evaluate_detector.py --directory test_images --output detector_results
 ```
 
-Outputs include annotated frames, rectified crops, and `summary.csv` with detections, valid corners, rankings, and timings. These are inspection results, not a labeled accuracy benchmark. Reusing an output directory overwrites matching output filenames and the summary.
+Produces annotated images, corrected crops, and `summary.csv` with rankings and CPU timings. This is an inspection tool, not an accuracy benchmark. Capture and evaluation overwrite outputs with matching filenames.
 
-The catalog tools accept `--database`; download and fingerprint tools also accept `--directory`. Camera and evaluation commands accept `--weights`. Inspect other options with:
-
-```powershell
-python import_set.py --help
-python scan_live.py --help
-python evaluate_detector.py --help
-```
+All tools accept `--database`; download and fingerprint tools accept `--directory`; camera and evaluation tools accept `--weights`. Use each script's `--help` for options.
 
 ## Folder structure
 
 ```text
-PokeCardScan/                    # Git repository root
+PokeCardScan/
 ├── README.md
 ├── .gitignore
 └── database/
-    ├── requirements.txt        # Pinned Python dependencies
-    ├── schema.sql              # Catalog, prices, images, hashes, sync history
-    ├── import_set.py           # Import one set and its prices
-    ├── download_images.py      # Download/verify reference images
-    ├── generate_fingerprints.py # Generate/verify 256-bit pHashes
-    ├── match_card.py           # Shared matcher and photo CLI
-    ├── card_geometry.py        # Shared corner validation and rectification
-    ├── capture_frame.py        # Interactive capture and matching
-    ├── scan_live.py            # Continuous webcam scanning
-    ├── evaluate_detector.py    # Saved-frame evaluation
-    ├── catalog.sqlite3         # Local catalog; ignored by Git
-    ├── images/                 # Reference downloads; ignored by Git
-    ├── models/                 # Local detector weights; currently untracked
-    ├── test_images/            # Local evaluation inputs; currently untracked
-    └── detector_results/       # Evaluation outputs; currently untracked
+    ├── requirements.txt         # Dependencies
+    ├── schema.sql               # SQLite schema
+    ├── import_set.py            # Catalog and price import
+    ├── download_images.py       # Reference download/verification
+    ├── generate_fingerprints.py # Fingerprint generation/verification
+    ├── match_card.py            # Shared matcher and photo CLI
+    ├── card_geometry.py         # Corner validation and rectification
+    ├── capture_frame.py         # Interactive webcam capture
+    ├── scan_live.py             # Continuous scanning
+    ├── evaluate_detector.py     # Saved-frame evaluation
+    ├── catalog.sqlite3          # Local database; ignored by Git
+    ├── images/                  # References; ignored by Git
+    ├── models/                  # Model weights; untracked
+    ├── test_images/             # Evaluation inputs; untracked
+    └── detector_results/        # Evaluation outputs; untracked
 ```
-
-The scripts share image-path naming through `download_images.py`, matching through `match_card.py`, and perspective correction through `card_geometry.py`. Import synchronization outcomes are recorded in the database's `sync_runs` table.
 
 ## Help and contributions
 
-Start with each command's `--help` and the relevant script linked in the [folder overview](#folder-structure). No dedicated support channel, contribution guide, or automated test suite is included in this checkout.
+Start with each script's `--help`. Report problems to the repository maintainer with the command, Python version, error output, and a reproducible example.
 
-When reporting a problem to the repository maintainer, include the command, Python version, error output, and a reproducible image or camera description. For recognition changes, compare saved-frame crops and rankings with [evaluate_detector.py](database/evaluate_detector.py); for catalog changes, run the preparation verification commands. Keep machine-specific databases and downloaded images out of contributions.
+No dedicated support channel, contribution guide, or automated test suite is included. Validate catalog changes with the verification commands and recognition changes with [evaluate_detector.py](database/evaluate_detector.py). Keep local databases and reference downloads out of contributions.
 
 ## License
 
-No project `LICENSE` file is included, so this checkout does not establish permission to redistribute or reuse the project's code. Ask the maintainer to clarify licensing before redistribution. Third-party packages and model weights have their own terms; [evaluate_detector.py](database/evaluate_detector.py) identifies the detector as AGPL-3.0. Card artwork and imported data are not licensed by this README.
+No project `LICENSE` file is included; ask the maintainer about reuse and redistribution. Dependencies, artwork, and imported data have separate terms. [evaluate_detector.py](database/evaluate_detector.py) identifies the model as `duclvQ/tcg-card-detector`, revision `419633c`, under AGPL-3.0.
