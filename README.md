@@ -119,12 +119,7 @@ PokeCardScan/
 
 The database, reference images, model weights, and evaluation files are local files created or supplied during setup and use.
 
-## Help and contributions
-
-Start with each script's `--help`. Report problems to the repository maintainer with the command, Python version, error output, and a reproducible example.
-
-No dedicated support channel, contribution guide, or automated test suite is included. Validate catalog changes with the verification commands and recognition changes with [evaluate_detector.py](database/evaluate_detector.py). Keep local databases and reference downloads out of contributions.
-
 ## License
 
-No project `LICENSE` file is included; ask the maintainer about reuse and redistribution. Dependencies, artwork, and imported data have separate terms. [evaluate_detector.py](database/evaluate_detector.py) identifies the model as `duclvQ/tcg-card-detector`, revision `419633c`, under AGPL-3.0.
+No project license has been specified. Third-party dependencies, model
+weights, artwork, and data remain subject to their respective licenses.
