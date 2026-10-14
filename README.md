@@ -110,12 +110,14 @@ PokeCardScan/
     ├── capture_frame.py         # Interactive webcam capture
     ├── scan_live.py             # Continuous scanning
     ├── evaluate_detector.py     # Saved-frame evaluation
-    ├── catalog.sqlite3          # Local database; ignored by Git
-    ├── images/                  # References; ignored by Git
-    ├── models/                  # Model weights; untracked
-    ├── test_images/             # Evaluation inputs; untracked
-    └── detector_results/        # Evaluation outputs; untracked
+    ├── catalog.sqlite3          # Local database
+    ├── images/                  # Reference images
+    ├── models/                  # Model weights
+    ├── test_images/             # Evaluation inputs
+    └── detector_results/        # Evaluation outputs
 ```
+
+The database, reference images, model weights, and evaluation files are local files created or supplied during setup and use.
 
 ## Help and contributions
 
